@@ -1,48 +1,32 @@
 import React, { useState, useEffect } from 'react';
 
 const GIMPA_STRUCTURE = {
-  "GIMPA Business School (GBS)": {
-    "Accounting & Finance": [
-      { name: "BSc in Business Administration (Accounting Option)", duration: 4 },
-      { name: "BSc in Business Administration (Finance Option)", duration: 4 },
-      { name: "MSc in Development Finance", duration: 2 }
-    ],
-    "Business Management": [
-      { name: "BSc in Business Administration (HRM Option)", duration: 4 },
-      { name: "BSc in Business Administration (Marketing Option)", duration: 4 },
-      { name: "Master of Business Administration (MBA)", duration: 2 }
-    ],
-    "Management Science": [
-      { name: "BSc in Procurement and Supply Chain Management", duration: 4 }
-    ]
-  },
-  "School of Technology and Social Sciences (SOTSS)": {
-    "Computer Science & Information Systems": [
-      { name: "BSc in Computer Science", duration: 4 },
-      { name: "BSc in Information Technology", duration: 4 },
-      { name: "MSc in Information Technology", duration: 2 }
-    ],
-    "Economics & Applied Mathematics": [
-      { name: "BSc in Economics", duration: 4 },
-      { name: "MSc in Financial Economics", duration: 2 }
-    ]
-  },
-  "GIMPA Law School": {
-    "Faculty of Law": [
-      { name: "Bachelor of Laws (LL.B) - Regular", duration: 4 },
-      { name: "Post-First Degree LL.B", duration: 3 }
-    ]
-  },
-  "School of Public Service and Governance (SPSG)": {
-    "Public Management & International Relations": [
-      { name: "Master of Public Administration (MPA)", duration: 2 },
-      { name: "MA in International Relations and Diplomacy", duration: 2 }
-    ],
-    "Development & Policy Studies": [
-      { name: "Bachelor of Public Administration", duration: 4 },
-      { name: "MPhil in Development Policy", duration: 2 }
-    ]
-  }
+  "GIMPA Business School (GBS)": [
+    { name: "BSc in Business Administration (Accounting Option)", duration: 4 },
+    { name: "BSc in Business Administration (Finance Option)", duration: 4 },
+    { name: "MSc in Development Finance", duration: 2 },
+    { name: "BSc in Business Administration (HRM Option)", duration: 4 },
+    { name: "BSc in Business Administration (Marketing Option)", duration: 4 },
+    { name: "Master of Business Administration (MBA)", duration: 2 },
+    { name: "BSc in Procurement and Supply Chain Management", duration: 4 }
+  ],
+  "School of Technology and Social Sciences (SOTSS)": [
+    { name: "BSc in Computer Science", duration: 4 },
+    { name: "BSc in Information Technology", duration: 4 },
+    { name: "MSc in Information Technology", duration: 2 },
+    { name: "BSc in Economics", duration: 4 },
+    { name: "MSc in Financial Economics", duration: 2 }
+  ],
+  "GIMPA Law School": [
+    { name: "Bachelor of Laws (LL.B) - Regular", duration: 4 },
+    { name: "Post-First Degree LL.B", duration: 3 }
+  ],
+  "School of Public Service and Governance (SPSG)": [
+    { name: "Master of Public Administration (MPA)", duration: 2 },
+    { name: "MA in International Relations and Diplomacy", duration: 2 },
+    { name: "Bachelor of Public Administration", duration: 4 },
+    { name: "MPhil in Development Policy", duration: 2 }
+  ]
 };
 
 export default function App() {
@@ -70,7 +54,6 @@ export default function App() {
   // Filtering States for Student View
   const [filterSearch, setFilterSearch] = useState('');
   const [filterSchool, setFilterSchool] = useState('');
-  const [filterDept, setFilterDept] = useState('');
   const [filterDegree, setFilterDegree] = useState('');
   const [filterYear, setFilterYear] = useState('');
   const [filterSemester, setFilterSemester] = useState('');
@@ -83,7 +66,6 @@ export default function App() {
   const [newQTitle, setNewQTitle] = useState('');
   const [newQCode, setNewQCode] = useState('');
   const [newQSchool, setNewQSchool] = useState('');
-  const [newQDept, setNewQDept] = useState('');
   const [newQDegree, setNewQDegree] = useState('');
   const [newQYear, setNewQYear] = useState('2025');
   const [newQSemester, setNewQSemester] = useState('First Semester');
@@ -93,9 +75,7 @@ export default function App() {
   // New Student Form State
   const [newSName, setNewSName] = useState('');
   const [newSIndex, setNewSIndex] = useState('');
-  const [newSPassword, setNewSPassword] = useState('password123'); // Default password
   const [newSSchool, setNewSSchool] = useState('');
-  const [newSDept, setNewSDept] = useState('');
   const [newSDegree, setNewSDegree] = useState('');
   const [newSAdmissionYear, setNewSAdmissionYear] = useState('2026');
   const [newSDuration, setNewSDuration] = useState(4);
@@ -110,10 +90,62 @@ export default function App() {
     }
   }, [user]);
 
+  // Protify Protected Viewer States
+  const [showProtectedViewerModal, setShowProtectedViewerModal] = useState(false);
+  const [viewingQuestionData, setViewingQuestionData] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  // Keyboard shortcut listener to prevent Ctrl+P, Ctrl+S, Ctrl+C inside Protify Protected Viewer
+  useEffect(() => {
+    if (!showProtectedViewerModal) return;
+
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && (['p', 'P', 's', 'S', 'c', 'C'].includes(e.key))) {
+        e.preventDefault();
+        alert('🔒 PROTIFY SECURITY NOTICE:\nDownloading, printing, saving, or copying this protected document is restricted for student accounts.');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showProtectedViewerModal]);
+
+  const handleOpenProtectedViewer = async (q) => {
+    setPreviewLoading(true);
+    setShowProtectedViewerModal(true);
+    try {
+      const res = await fetch(`/api/questions/${q.id}/preview`);
+      if (res.ok) {
+        const data = await res.json();
+        setViewingQuestionData(data);
+      } else {
+        setViewingQuestionData({
+          ...q,
+          content: {
+            instructions: `GHANA INSTITUTE OF MANAGEMENT AND PUBLIC ADMINISTRATION (GIMPA)\n${q.school.toUpperCase()}\n${q.degree.toUpperCase()}\n\nEND OF ${q.semester.toUpperCase()} EXAMINATIONS - ${q.year}\nCOURSE: ${q.course_code} - ${q.title.toUpperCase()}\nTIME ALLOWED: 3 HOURS\n\nINSTRUCTIONS: Answer ALL questions in Section A and ANY TWO questions in Section B.`,
+            sections: [
+              {
+                name: "SECTION A (Compulsory - 40 Marks)",
+                questions: [
+                  `1. Discuss the core principles of ${q.title} within ${q.school}. [20 Marks]`,
+                  `2. Analyze practical applications of ${q.course_code} for ${q.degree}. [20 Marks]`
+                ]
+              }
+            ]
+          }
+        });
+      }
+    } catch (err) {
+      console.error("Failed to load paper preview", err);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
   // Refetch questions on filter changes
   useEffect(() => {
     fetchQuestions();
-  }, [filterSearch, filterSchool, filterDept, filterDegree, filterYear, filterSemester]);
+  }, [filterSearch, filterSchool, filterDegree, filterYear, filterSemester]);
 
   const fetchSystemSettings = async () => {
     try {
@@ -132,7 +164,6 @@ export default function App() {
       let queryParams = new URLSearchParams();
       if (filterSearch) queryParams.append('search', filterSearch);
       if (filterSchool) queryParams.append('school', filterSchool);
-      if (filterDept) queryParams.append('department', filterDept);
       if (filterDegree) queryParams.append('degree', filterDegree);
       if (filterYear) queryParams.append('year', filterYear);
       if (filterSemester) queryParams.append('semester', filterSemester);
@@ -164,10 +195,17 @@ export default function App() {
     e.preventDefault();
     setLoginError('');
     try {
+      const payload = {
+        username: loginUsername.trim().split(/\s+/)[0],
+        role: loginRole
+      };
+      if (loginRole === 'admin') {
+        payload.password = loginPassword;
+      }
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: loginUsername, password: loginPassword, role: loginRole })
+        body: JSON.stringify(payload)
       });
       const data = await res.json();
       
@@ -239,7 +277,7 @@ export default function App() {
     e.preventDefault();
     setUploadError('');
 
-    if (!newQTitle || !newQCode || !newQSchool || !newQDept || !newQDegree) {
+    if (!newQTitle || !newQCode || !newQSchool || !newQDegree) {
       setUploadError('Please fill in all program fields.');
       return;
     }
@@ -248,7 +286,6 @@ export default function App() {
     formData.append('title', newQTitle);
     formData.append('course_code', newQCode);
     formData.append('school', newQSchool);
-    formData.append('department', newQDept);
     formData.append('degree', newQDegree);
     formData.append('year', newQYear);
     formData.append('semester', newQSemester);
@@ -282,7 +319,7 @@ export default function App() {
     e.preventDefault();
     setCreateStudentError('');
 
-    if (!newSName || !newSIndex || !newSPassword || !newSSchool || !newSDept || !newSDegree) {
+    if (!newSName || !newSIndex || !newSSchool || !newSDegree) {
       setCreateStudentError('Please fill in all student details.');
       return;
     }
@@ -294,9 +331,7 @@ export default function App() {
         body: JSON.stringify({
           name: newSName,
           index_number: newSIndex,
-          password: newSPassword,
           school: newSSchool,
-          department: newSDept,
           degree: newSDegree,
           admission_year: parseInt(newSAdmissionYear, 10),
           duration: parseInt(newSDuration, 10)
@@ -310,7 +345,6 @@ export default function App() {
         // Reset fields
         setNewSName('');
         setNewSIndex('');
-        setNewSPassword('password123');
       } else {
         setCreateStudentError(data.error || 'Failed to create student account');
       }
@@ -353,25 +387,13 @@ export default function App() {
     }
   };
 
-  // Cascading Dynamic Dropdowns for Creating Student
+  // Cascading Dynamic Dropdowns for Creating Student / Uploading Question
   const handleSchoolChange = (schoolVal, isQuestion = false) => {
     if (isQuestion) {
       setNewQSchool(schoolVal);
-      setNewQDept('');
       setNewQDegree('');
     } else {
       setNewSSchool(schoolVal);
-      setNewSDept('');
-      setNewSDegree('');
-    }
-  };
-
-  const handleDeptChange = (deptVal, isQuestion = false) => {
-    if (isQuestion) {
-      setNewQDept(deptVal);
-      setNewQDegree('');
-    } else {
-      setNewSDept(deptVal);
       setNewSDegree('');
     }
   };
@@ -382,14 +404,11 @@ export default function App() {
     } else {
       setNewSDegree(degreeVal);
       // Auto-set duration based on selected degree structure
-      const schoolDepts = GIMPA_STRUCTURE[newSSchool];
-      if (schoolDepts) {
-        const degrees = schoolDepts[newSDept];
-        if (degrees) {
-          const matched = degrees.find(d => d.name === degreeVal);
-          if (matched) {
-            setNewSDuration(matched.duration);
-          }
+      const degrees = GIMPA_STRUCTURE[newSSchool];
+      if (degrees) {
+        const matched = degrees.find(d => d.name === degreeVal);
+        if (matched) {
+          setNewSDuration(matched.duration);
         }
       }
     }
@@ -485,17 +504,19 @@ export default function App() {
                 />
               </div>
 
-              <div className="form-group">
-                <label>Password</label>
-                <input 
-                  type="password" 
-                  value={loginPassword}
-                  onChange={(e) => setLoginPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="form-input"
-                  required
-                />
-              </div>
+              {loginRole === 'admin' && (
+                <div className="form-group">
+                  <label>Admin Password</label>
+                  <input 
+                    type="password" 
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="form-input"
+                    required
+                  />
+                </div>
+              )}
 
               <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '10px' }}>
                 Login as {loginRole === 'student' ? 'Student' : 'Librarian'}
@@ -509,7 +530,7 @@ export default function App() {
             )}
             {loginRole === 'student' && (
               <div style={{ textAlign: 'center', marginTop: '16px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                Demo Accounts: <code>2261001</code> (Active) or <code>2261002</code> (Graduating) / password: <code>password123</code>
+                Demo Accounts: <code>2261001</code> (Active) or <code>2261002</code> (Graduating) (No Password Required)
               </div>
             )}
           </div>
@@ -601,7 +622,6 @@ export default function App() {
                   value={filterSchool} 
                   onChange={(e) => {
                     setFilterSchool(e.target.value);
-                    setFilterDept('');
                     setFilterDegree('');
                   }}
                   className="form-select"
@@ -613,28 +633,13 @@ export default function App() {
                 </select>
 
                 <select 
-                  value={filterDept} 
-                  onChange={(e) => {
-                    setFilterDept(e.target.value);
-                    setFilterDegree('');
-                  }}
-                  className="form-select"
-                  disabled={!filterSchool}
-                >
-                  <option value="">All Departments</option>
-                  {filterSchool && Object.keys(GIMPA_STRUCTURE[filterSchool]).map(d => (
-                    <option key={d} value={d}>{d}</option>
-                  ))}
-                </select>
-
-                <select 
                   value={filterDegree} 
                   onChange={(e) => setFilterDegree(e.target.value)}
                   className="form-select"
-                  disabled={!filterDept}
+                  disabled={!filterSchool}
                 >
                   <option value="">All Programs</option>
-                  {filterDept && GIMPA_STRUCTURE[filterSchool][filterDept].map(dg => (
+                  {filterSchool && GIMPA_STRUCTURE[filterSchool].map(dg => (
                     <option key={dg.name} value={dg.name}>{dg.name}</option>
                   ))}
                 </select>
@@ -703,9 +708,30 @@ export default function App() {
 
                       <div className="q-actions">
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Uploaded: {new Date(q.uploaded_at).toLocaleDateString()}</span>
-                        <button onClick={() => handleDownloadPDF(q)} className="btn btn-primary btn-sm">
-                          Download PDF
-                        </button>
+                        {user?.role === 'student' ? (
+                          <button 
+                            onClick={() => handleOpenProtectedViewer(q)} 
+                            className="btn btn-primary btn-sm"
+                            style={{ background: 'linear-gradient(135deg, #4f46e5, #06b6d4)' }}
+                          >
+                            🔒 View Paper (Protected)
+                          </button>
+                        ) : (
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button 
+                              onClick={() => handleOpenProtectedViewer(q)} 
+                              className="btn btn-secondary btn-sm"
+                            >
+                              👁️ Preview
+                            </button>
+                            <button 
+                              onClick={() => handleDownloadPDF(q)} 
+                              className="btn btn-primary btn-sm"
+                            >
+                              Download PDF
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -988,38 +1014,20 @@ export default function App() {
                 </select>
               </div>
 
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Department</label>
-                  <select 
-                    value={newQDept} 
-                    onChange={(e) => handleDeptChange(e.target.value, true)}
-                    className="form-select" 
-                    disabled={!newQSchool}
-                    required
-                  >
-                    <option value="">Select Department</option>
-                    {newQSchool && Object.keys(GIMPA_STRUCTURE[newQSchool]).map(d => (
-                      <option key={d} value={d}>{d}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label>Degree Program</label>
-                  <select 
-                    value={newQDegree} 
-                    onChange={(e) => handleDegreeChange(e.target.value, true)}
-                    className="form-select" 
-                    disabled={!newQDept}
-                    required
-                  >
-                    <option value="">Select Degree</option>
-                    {newQDept && GIMPA_STRUCTURE[newQSchool][newQDept].map(dg => (
-                      <option key={dg.name} value={dg.name}>{dg.name}</option>
-                    ))}
-                  </select>
-                </div>
+              <div className="form-group">
+                <label>Degree Program</label>
+                <select 
+                  value={newQDegree} 
+                  onChange={(e) => handleDegreeChange(e.target.value, true)}
+                  className="form-select" 
+                  disabled={!newQSchool}
+                  required
+                >
+                  <option value="">Select Degree</option>
+                  {newQSchool && GIMPA_STRUCTURE[newQSchool].map(dg => (
+                    <option key={dg.name} value={dg.name}>{dg.name}</option>
+                  ))}
+                </select>
               </div>
 
               <div className="form-row">
@@ -1111,63 +1119,34 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Student Password</label>
-                  <input 
-                    type="password" 
-                    value={newSPassword}
-                    onChange={(e) => setNewSPassword(e.target.value)}
-                    placeholder="password123" 
-                    className="form-input" 
-                    required 
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Admission Year</label>
-                  <select 
-                    value={newSAdmissionYear} 
-                    onChange={(e) => setNewSAdmissionYear(e.target.value)}
-                    className="form-select" 
-                    required
-                  >
-                    <option value="2026">2026</option>
-                    <option value="2025">2025</option>
-                    <option value="2024">2024</option>
-                    <option value="2023">2023</option>
-                    <option value="2022">2022</option>
-                  </select>
-                </div>
-              </div>
-
               <div className="form-group">
-                <label>GIMPA School</label>
+                <label>Admission Year</label>
                 <select 
-                  value={newSSchool} 
-                  onChange={(e) => handleSchoolChange(e.target.value, false)}
+                  value={newSAdmissionYear} 
+                  onChange={(e) => setNewSAdmissionYear(e.target.value)}
                   className="form-select" 
                   required
                 >
-                  <option value="">Select School</option>
-                  {Object.keys(GIMPA_STRUCTURE).map(s => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
+                  <option value="2026">2026</option>
+                  <option value="2025">2025</option>
+                  <option value="2024">2024</option>
+                  <option value="2023">2023</option>
+                  <option value="2022">2022</option>
                 </select>
               </div>
 
               <div className="form-row">
                 <div className="form-group">
-                  <label>Department</label>
+                  <label>GIMPA School</label>
                   <select 
-                    value={newSDept} 
-                    onChange={(e) => handleDeptChange(e.target.value, false)}
+                    value={newSSchool} 
+                    onChange={(e) => handleSchoolChange(e.target.value, false)}
                     className="form-select" 
-                    disabled={!newSSchool}
                     required
                   >
-                    <option value="">Select Department</option>
-                    {newSSchool && Object.keys(GIMPA_STRUCTURE[newSSchool]).map(d => (
-                      <option key={d} value={d}>{d}</option>
+                    <option value="">Select School</option>
+                    {Object.keys(GIMPA_STRUCTURE).map(s => (
+                      <option key={s} value={s}>{s}</option>
                     ))}
                   </select>
                 </div>
@@ -1178,11 +1157,11 @@ export default function App() {
                     value={newSDegree} 
                     onChange={(e) => handleDegreeChange(e.target.value, false)}
                     className="form-select" 
-                    disabled={!newSDept}
+                    disabled={!newSSchool}
                     required
                   >
                     <option value="">Select Degree</option>
-                    {newSDept && GIMPA_STRUCTURE[newSSchool][newSDept].map(dg => (
+                    {newSSchool && GIMPA_STRUCTURE[newSSchool].map(dg => (
                       <option key={dg.name} value={dg.name}>{dg.name}</option>
                     ))}
                   </select>
@@ -1211,6 +1190,74 @@ export default function App() {
                 Create Student Account (Pending Activation)
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 6. MODAL: Protify Protected Paper Viewer */}
+      {showProtectedViewerModal && (
+        <div className="modal-overlay">
+          <div className="modal-content glass-panel protected-modal" onContextMenu={(e) => e.preventDefault()}>
+            <div className="modal-header" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '16px' }}>
+              <div>
+                <h3 style={{ fontSize: '1.2rem' }}>
+                  {viewingQuestionData?.course_code} - {viewingQuestionData?.title}
+                </h3>
+              </div>
+              <button 
+                onClick={() => { setShowProtectedViewerModal(false); setViewingQuestionData(null); }} 
+                className="modal-close"
+              >
+                ×
+              </button>
+            </div>
+
+
+            {previewLoading ? (
+              <div className="empty-state" style={{ padding: '40px' }}>Loading protected document preview...</div>
+            ) : (
+              <div className="protected-paper-wrapper">
+                {/* Diagonal Repeat Watermark Overlay */}
+                <div className="protify-watermark-layer">
+                  <div className="watermark-line">GIMPA CONFIDENTIAL • STUDENT INDEX: {user?.index_number || 'STUDENT'} • DO NOT COPY • PROTIFY PROTECTED</div>
+                  <div className="watermark-line">GIMPA CONFIDENTIAL • STUDENT INDEX: {user?.index_number || 'STUDENT'} • DO NOT COPY • PROTIFY PROTECTED</div>
+                  <div className="watermark-line">GIMPA CONFIDENTIAL • STUDENT INDEX: {user?.index_number || 'STUDENT'} • DO NOT COPY • PROTIFY PROTECTED</div>
+                  <div className="watermark-line">GIMPA CONFIDENTIAL • STUDENT INDEX: {user?.index_number || 'STUDENT'} • DO NOT COPY • PROTIFY PROTECTED</div>
+                </div>
+
+                {/* Exam Paper Body */}
+                <div className="exam-document-body">
+                  <div className="exam-header-banner">
+                    <div className="gimpa-institute-title">GHANA INSTITUTE OF MANAGEMENT AND PUBLIC ADMINISTRATION</div>
+                    <div className="school-title">{viewingQuestionData?.school}</div>
+                    <div className="degree-title">{viewingQuestionData?.degree}</div>
+                    <div className="exam-details-meta">
+                      <div><strong>COURSE CODE & TITLE:</strong> {viewingQuestionData?.course_code} - {viewingQuestionData?.title}</div>
+                      <div><strong>PERIOD:</strong> {viewingQuestionData?.semester} ({viewingQuestionData?.year})</div>
+                    </div>
+                  </div>
+
+                  <div className="exam-instructions">
+                    <pre style={{ fontFamily: 'var(--font-body)', whiteSpace: 'pre-wrap', fontSize: '0.85rem', margin: 0 }}>
+                      {viewingQuestionData?.content?.instructions}
+                    </pre>
+                  </div>
+
+                  {viewingQuestionData?.content?.sections?.map((sec, idx) => (
+                    <div key={idx} className="exam-section-block">
+                      <h4 className="exam-section-title">{sec.name}</h4>
+                      {sec.questions.map((qText, qIdx) => (
+                        <div key={qIdx} className="exam-question-card">
+                          <pre style={{ fontFamily: 'var(--font-body)', whiteSpace: 'pre-wrap', fontSize: '0.9rem', margin: 0 }}>
+                            {qText}
+                          </pre>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

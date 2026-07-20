@@ -30,9 +30,7 @@ let mockData = {
       id: 1,
       index_number: '2261001',
       name: 'Kofi Mensah',
-      password: 'password123',
       school: 'GIMPA Business School (GBS)',
-      department: 'Accounting & Finance',
       degree: 'BSc in Business Administration (Accounting Option)',
       admission_year: 2024,
       duration: 4,
@@ -43,9 +41,7 @@ let mockData = {
       id: 2,
       index_number: '2261002',
       name: 'Ama Serwaa',
-      password: 'password123',
       school: 'School of Technology and Social Sciences (SOTSS)',
-      department: 'Computer Science & Information Systems',
       degree: 'BSc in Computer Science',
       admission_year: 2022,
       duration: 4,
@@ -56,9 +52,7 @@ let mockData = {
       id: 3,
       index_number: '2261003',
       name: 'Kojo Antwi',
-      password: 'password123',
       school: 'GIMPA Law School',
-      department: 'Faculty of Law',
       degree: 'Post-First Degree LL.B',
       admission_year: 2025,
       duration: 3,
@@ -72,7 +66,6 @@ let mockData = {
       title: 'Introduction to Computer Programming',
       course_code: 'SOT-101',
       school: 'School of Technology and Social Sciences (SOTSS)',
-      department: 'Computer Science & Information Systems',
       degree: 'BSc in Computer Science',
       year: 2024,
       semester: 'First Semester',
@@ -85,7 +78,6 @@ let mockData = {
       title: 'Financial Accounting I',
       course_code: 'GBS-201',
       school: 'GIMPA Business School (GBS)',
-      department: 'Accounting & Finance',
       degree: 'BSc in Business Administration (Accounting Option)',
       year: 2025,
       semester: 'First Semester',
@@ -98,7 +90,6 @@ let mockData = {
       title: 'Constitutional Law I',
       course_code: 'LAW-101',
       school: 'GIMPA Law School',
-      department: 'Faculty of Law',
       degree: 'Bachelor of Laws (LL.B) - Regular',
       year: 2023,
       semester: 'Second Semester',
@@ -193,9 +184,7 @@ async function createTables() {
         id INT AUTO_INCREMENT PRIMARY KEY,
         index_number VARCHAR(50) UNIQUE NOT NULL,
         name VARCHAR(100) NOT NULL,
-        password VARCHAR(255) NOT NULL,
         school VARCHAR(100) NOT NULL,
-        department VARCHAR(100) NOT NULL,
         degree VARCHAR(100) NOT NULL,
         admission_year INT NOT NULL,
         duration INT NOT NULL,
@@ -210,7 +199,6 @@ async function createTables() {
         title VARCHAR(255) NOT NULL,
         course_code VARCHAR(50) NOT NULL,
         school VARCHAR(100) NOT NULL,
-        department VARCHAR(100) NOT NULL,
         degree VARCHAR(100) NOT NULL,
         year INT NOT NULL,
         semester VARCHAR(20) NOT NULL,
@@ -236,9 +224,9 @@ async function seedData() {
     if (students[0].count === 0) {
       for (const s of mockData.students) {
         await connection.query(`
-          INSERT INTO students (index_number, name, password, school, department, degree, admission_year, duration, status)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, [s.index_number, s.name, s.password, s.school, s.department, s.degree, s.admission_year, s.duration, s.status]);
+          INSERT INTO students (index_number, name, school, degree, admission_year, duration, status)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `, [s.index_number, s.name, s.school, s.degree, s.admission_year, s.duration, s.status]);
       }
     }
 
@@ -246,9 +234,9 @@ async function seedData() {
     if (questions[0].count === 0) {
       for (const q of mockData.past_questions) {
         await connection.query(`
-          INSERT INTO past_questions (title, course_code, school, department, degree, year, semester, file_name, file_path)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, [q.title, q.course_code, q.school, q.department, q.degree, q.year, q.semester, q.file_name, q.file_path]);
+          INSERT INTO past_questions (title, course_code, school, degree, year, semester, file_name, file_path)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `, [q.title, q.course_code, q.school, q.degree, q.year, q.semester, q.file_name, q.file_path]);
       }
     }
   } finally {
@@ -268,7 +256,7 @@ export async function query(sql, params = []) {
 
   // MOCK DB LOGIC
   const cleanSql = sql.trim().replace(/\s+/g, ' ');
-  // console.log(`[MOCK QUERY]: ${cleanSql} | Params:`, params);
+  console.log(`[MOCK QUERY]: ${cleanSql} | Params:`, params);
 
   // 1. Settings Queries
   if (cleanSql.startsWith('SELECT * FROM system_settings WHERE setting_key = "current_academic_year"')) {
@@ -308,7 +296,7 @@ export async function query(sql, params = []) {
   if (cleanSql.startsWith('SELECT * FROM students WHERE id = ?')) {
     return mockData.students.filter(s => s.id == params[0]);
   }
-  if (cleanSql.startsWith('SELECT id, index_number, name, school, department, degree, admission_year, duration, status, created_at FROM students ORDER BY created_at DESC')) {
+  if (cleanSql.startsWith('SELECT id, index_number, name, school, degree, admission_year, duration, status, created_at FROM students ORDER BY created_at DESC')) {
     return [...mockData.students].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   }
 
@@ -323,34 +311,31 @@ export async function query(sql, params = []) {
   }
 
   // 6. Update Student Details
-  if (cleanSql.startsWith('UPDATE students SET name = ?, school = ?, department = ?, degree = ?, admission_year = ?, duration = ?, status = ? WHERE id = ?')) {
-    const st = mockData.students.find(s => s.id == params[7]);
+  if (cleanSql.startsWith('UPDATE students SET name = ?, school = ?, degree = ?, admission_year = ?, duration = ?, status = ? WHERE id = ?')) {
+    const st = mockData.students.find(s => s.id == params[6]);
     if (st) {
       st.name = params[0];
       st.school = params[1];
-      st.department = params[2];
-      st.degree = params[3];
-      st.admission_year = parseInt(params[4], 10);
-      st.duration = parseInt(params[5], 10);
-      st.status = params[6];
+      st.degree = params[2];
+      st.admission_year = parseInt(params[3], 10);
+      st.duration = parseInt(params[4], 10);
+      st.status = params[5];
       saveMockDB();
     }
     return { affectedRows: 1 };
   }
 
   // 7. Insert Student
-  if (cleanSql.startsWith('INSERT INTO students (index_number, name, password, school, department, degree, admission_year, duration, status)')) {
+  if (cleanSql.startsWith('INSERT INTO students (index_number, name, school, degree, admission_year, duration, status)')) {
     const newStudent = {
       id: mockData.students.length > 0 ? Math.max(...mockData.students.map(s => s.id)) + 1 : 1,
       index_number: params[0],
       name: params[1],
-      password: params[2],
-      school: params[3],
-      department: params[4],
-      degree: params[5],
-      admission_year: parseInt(params[6], 10),
-      duration: parseInt(params[7], 10),
-      status: params[8] || 'pending',
+      school: params[2],
+      degree: params[3],
+      admission_year: parseInt(params[4], 10),
+      duration: parseInt(params[5], 10),
+      status: params[6] || 'pending',
       created_at: new Date().toISOString()
     };
     mockData.students.push(newStudent);
@@ -368,11 +353,7 @@ export async function query(sql, params = []) {
   // 9. Past Questions Queries
   if (cleanSql.startsWith('SELECT * FROM past_questions')) {
     // Determine filters based on query syntax (in index.js, filter parameters are dynamically appended)
-    // To implement a simple robust evaluator, we can match against the parameters list
-    // Express routes filter queries in order: search, school, department, degree, year, semester
     let results = [...mockData.past_questions];
-
-    // Build filters dynamically by checking sql query components
     let paramIndex = 0;
 
     if (cleanSql.includes('AND (title LIKE ? OR course_code LIKE ?)')) {
@@ -383,10 +364,6 @@ export async function query(sql, params = []) {
     if (cleanSql.includes('AND school = ?')) {
       const val = params[paramIndex++];
       results = results.filter(q => q.school === val);
-    }
-    if (cleanSql.includes('AND department = ?')) {
-      const val = params[paramIndex++];
-      results = results.filter(q => q.department === val);
     }
     if (cleanSql.includes('AND degree = ?')) {
       const val = params[paramIndex++];
@@ -413,12 +390,11 @@ export async function query(sql, params = []) {
       title: params[0],
       course_code: params[1],
       school: params[2],
-      department: params[3],
-      degree: params[4],
-      year: parseInt(params[5], 10),
-      semester: params[6],
-      file_name: params[7],
-      file_path: params[8],
+      degree: params[3],
+      year: parseInt(params[4], 10),
+      semester: params[5],
+      file_name: params[6],
+      file_path: params[7],
       uploaded_at: new Date().toISOString()
     };
     mockData.past_questions.push(newQuestion);

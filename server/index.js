@@ -106,13 +106,19 @@ app.post('/api/system/year', async (req, res) => {
 app.post('/api/auth/login', async (req, res) => {
   const { username, password, role } = req.body;
 
-  if (!username || !password || !role) {
-    return res.status(400).json({ error: 'Username/Index Number, password, and role are required' });
+  if (!username || !role) {
+    return res.status(400).json({ error: 'Username/Index Number and role are required' });
   }
+
+  // Normalize username by trimming and taking the first word to handle duplicate or space-padded inputs
+  const cleanUsername = username.trim().split(/\s+/)[0];
 
   try {
     if (role === 'admin') {
-      if (username === 'admin' && password === 'password') {
+      if (!password) {
+        return res.status(400).json({ error: 'Admin password is required' });
+      }
+      if (cleanUsername === 'admin' && password === 'password') {
         return res.json({ 
           token: 'mock-admin-token', 
           user: { name: 'Library Admin', role: 'admin', username: 'admin' } 
@@ -126,17 +132,12 @@ app.post('/api/auth/login', async (req, res) => {
       const currentYear = parseInt(settings[0]?.setting_value || '2026', 10);
 
       // Check student
-      const students = await query('SELECT * FROM students WHERE index_number = ?', [username]);
+      const students = await query('SELECT * FROM students WHERE index_number = ?', [cleanUsername]);
       if (students.length === 0) {
         return res.status(401).json({ error: 'Student index number not found' });
       }
 
       const student = students[0];
-      
-      // Verify password
-      if (student.password !== password) {
-        return res.status(401).json({ error: 'Invalid password' });
-      }
 
       // Run dynamic deactivation check on login (fail-safe)
       const graduationYear = student.admission_year + student.duration;
@@ -166,7 +167,6 @@ app.post('/api/auth/login', async (req, res) => {
           index_number: student.index_number,
           name: student.name,
           school: student.school,
-          department: student.department,
           degree: student.degree,
           admission_year: student.admission_year,
           duration: student.duration,
@@ -184,7 +184,7 @@ app.post('/api/auth/login', async (req, res) => {
 
 // 3. Past Questions API
 app.get('/api/questions', async (req, res) => {
-  const { search, school, department, degree, year, semester } = req.query;
+  const { search, school, degree, year, semester } = req.query;
   
   let sql = 'SELECT * FROM past_questions WHERE 1=1';
   const params = [];
@@ -196,10 +196,6 @@ app.get('/api/questions', async (req, res) => {
   if (school) {
     sql += ' AND school = ?';
     params.push(school);
-  }
-  if (department) {
-    sql += ' AND department = ?';
-    params.push(department);
   }
   if (degree) {
     sql += ' AND degree = ?';
@@ -224,11 +220,60 @@ app.get('/api/questions', async (req, res) => {
   }
 });
 
+// Secure Question Preview Endpoint (Returns structured exam paper content for Protify Protected Viewer)
+app.get('/api/questions/:id/preview', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const questions = await query('SELECT * FROM past_questions WHERE id = ?', [id]);
+    if (questions.length === 0) {
+      return res.status(404).json({ error: 'Question not found' });
+    }
+    const q = questions[0];
+    res.json({
+      id: q.id,
+      title: q.title,
+      course_code: q.course_code,
+      school: q.school,
+      degree: q.degree,
+      year: q.year,
+      semester: q.semester,
+      uploaded_at: q.uploaded_at,
+      security: {
+        protected: true,
+        watermarkRequired: true,
+        downloadAllowed: false
+      },
+      content: {
+        instructions: `GHANA INSTITUTE OF MANAGEMENT AND PUBLIC ADMINISTRATION (GIMPA)\n${q.school.toUpperCase()}\n${q.degree.toUpperCase()}\n\nEND OF ${q.semester.toUpperCase()} EXAMINATIONS - ${q.year}\nCOURSE: ${q.course_code} - ${q.title.toUpperCase()}\nTIME ALLOWED: 3 HOURS\n\nINSTRUCTIONS: Answer ALL questions in Section A and ANY TWO questions in Section B. Credit will be given for clarity of presentation, logical arguments, and appropriate practical examples.`,
+        sections: [
+          {
+            name: "SECTION A (Compulsory - 40 Marks)",
+            questions: [
+              `1. (a) Define the core principles of ${q.title} within the context of ${q.school}. [10 Marks]\n   (b) Discuss three key challenges faced by practitioners when implementing these concepts in modern environments. [10 Marks]`,
+              `2. Examine the impact of regulatory frameworks and operational developments on ${q.course_code}. Illustrate your answer with relevant examples. [20 Marks]`
+            ]
+          },
+          {
+            name: "SECTION B (Answer Any Two Questions - 30 Marks Each)",
+            questions: [
+              `3. Analytical Evaluation:\n   Compare and contrast theoretical framework models against real-world scenario outcomes in Ghana. [30 Marks]`,
+              `4. Critical Analysis:\n   Propose a strategic roadmap for optimizing efficiency in your chosen area of ${q.degree}. [30 Marks]`,
+              `5. Short Notes:\n   Write concise explanatory notes on FOUR of the following terms:\n   (i) Foundational Standards\n   (ii) Operational Governance\n   (iii) Compliance Metrics\n   (iv) Strategic Risk Management\n   (v) Performance Evaluation Framework [30 Marks]`
+            ]
+          }
+        ]
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Upload Past Question
 app.post('/api/questions', upload.single('pdf'), async (req, res) => {
-  const { title, course_code, school, department, degree, year, semester } = req.body;
+  const { title, course_code, school, degree, year, semester } = req.body;
 
-  if (!title || !course_code || !school || !department || !degree || !year || !semester) {
+  if (!title || !course_code || !school || !degree || !year || !semester) {
     return res.status(400).json({ error: 'All question fields are required' });
   }
 
@@ -249,9 +294,9 @@ app.post('/api/questions', upload.single('pdf'), async (req, res) => {
 
   try {
     const result = await query(
-      `INSERT INTO past_questions (title, course_code, school, department, degree, year, semester, file_name, file_path)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [title, course_code, school, department, degree, parseInt(year, 10), semester, fileName, filePath]
+      `INSERT INTO past_questions (title, course_code, school, degree, year, semester, file_name, file_path)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [title, course_code, school, degree, parseInt(year, 10), semester, fileName, filePath]
     );
 
     res.status(201).json({
@@ -261,7 +306,6 @@ app.post('/api/questions', upload.single('pdf'), async (req, res) => {
         title,
         course_code,
         school,
-        department,
         degree,
         year,
         semester,
@@ -282,7 +326,7 @@ app.get('/api/students', async (req, res) => {
     const currentYear = parseInt(settings[0]?.setting_value || '2026', 10);
     await runAutoDeactivations(currentYear);
 
-    const students = await query('SELECT id, index_number, name, school, department, degree, admission_year, duration, status, created_at FROM students ORDER BY created_at DESC');
+    const students = await query('SELECT id, index_number, name, school, degree, admission_year, duration, status, created_at FROM students ORDER BY created_at DESC');
     res.json(students);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -291,9 +335,9 @@ app.get('/api/students', async (req, res) => {
 
 // Create Student
 app.post('/api/students', async (req, res) => {
-  const { index_number, name, password, school, department, degree, admission_year, duration } = req.body;
+  const { index_number, name, school, degree, admission_year, duration } = req.body;
 
-  if (!index_number || !name || !password || !school || !department || !degree || !admission_year || !duration) {
+  if (!index_number || !name || !school || !degree || !admission_year || !duration) {
     return res.status(400).json({ error: 'All student fields are required' });
   }
 
@@ -306,9 +350,9 @@ app.post('/api/students', async (req, res) => {
 
     // Default status is pending, but admin can choose. Let's make it start as 'pending' (library admin must activate)
     const result = await query(
-      `INSERT INTO students (index_number, name, password, school, department, degree, admission_year, duration, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
-      [index_number, name, password, school, department, degree, parseInt(admission_year, 10), parseInt(duration, 10)]
+      `INSERT INTO students (index_number, name, school, degree, admission_year, duration, status)
+       VALUES (?, ?, ?, ?, ?, ?, 'pending')`,
+      [index_number, name, school, degree, parseInt(admission_year, 10), parseInt(duration, 10)]
     );
 
     res.status(201).json({
@@ -318,7 +362,6 @@ app.post('/api/students', async (req, res) => {
         index_number,
         name,
         school,
-        department,
         degree,
         admission_year,
         duration,
@@ -365,14 +408,14 @@ app.post('/api/students/:id/status', async (req, res) => {
 // Update Student details (including Year/Duration)
 app.put('/api/students/:id', async (req, res) => {
   const { id } = req.params;
-  const { name, school, department, degree, admission_year, duration, status } = req.body;
+  const { name, school, degree, admission_year, duration, status } = req.body;
 
   try {
     await query(
       `UPDATE students 
-       SET name = ?, school = ?, department = ?, degree = ?, admission_year = ?, duration = ?, status = ?
+       SET name = ?, school = ?, degree = ?, admission_year = ?, duration = ?, status = ?
        WHERE id = ?`,
-      [name, school, department, degree, parseInt(admission_year, 10), parseInt(duration, 10), status, id]
+      [name, school, degree, parseInt(admission_year, 10), parseInt(duration, 10), status, id]
     );
     res.json({ message: 'Student updated successfully.' });
   } catch (error) {

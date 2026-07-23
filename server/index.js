@@ -373,6 +373,67 @@ app.post('/api/students', async (req, res) => {
   }
 });
 
+// Bulk Create Students
+app.post('/api/students/bulk', async (req, res) => {
+  const { students } = req.body;
+
+  if (!students || !Array.isArray(students)) {
+    return res.status(400).json({ error: 'A list of students is required' });
+  }
+
+  const results = {
+    successCount: 0,
+    failCount: 0,
+    errors: []
+  };
+
+  for (const student of students) {
+    const { index_number, name, school, degree, admission_year, duration } = student;
+
+    if (!index_number || !name || !school || !degree || !admission_year || !duration) {
+      results.failCount++;
+      results.errors.push({
+        index_number: index_number || 'UNKNOWN',
+        name: name || 'UNKNOWN',
+        error: 'Missing required student fields'
+      });
+      continue;
+    }
+
+    try {
+      // Check if index number exists
+      const existing = await query('SELECT * FROM students WHERE index_number = ?', [index_number]);
+      if (existing.length > 0) {
+        results.failCount++;
+        results.errors.push({
+          index_number,
+          name,
+          error: 'Index number already exists'
+        });
+        continue;
+      }
+
+      await query(
+        `INSERT INTO students (index_number, name, school, degree, admission_year, duration, status)
+         VALUES (?, ?, ?, ?, ?, ?, 'pending')`,
+        [index_number, name, school, degree, parseInt(admission_year, 10), parseInt(duration, 10)]
+      );
+
+      results.successCount++;
+    } catch (error) {
+      results.failCount++;
+      results.errors.push({
+        index_number,
+        name,
+        error: error.message
+      });
+    }
+  }
+
+  res.status(200).json(results);
+});
+
+
 // Update Student Status (Activate/Deactivate manually)
 app.post('/api/students/:id/status', async (req, res) => {
   const { id } = req.params;

@@ -81,6 +81,14 @@ export default function App() {
   const [newSDuration, setNewSDuration] = useState(4);
   const [createStudentError, setCreateStudentError] = useState('');
 
+  // Bulk Student Upload States
+  const [showBulkUploadModal, setShowBulkUploadModal] = useState(false);
+  const [bulkUploadFile, setBulkUploadFile] = useState(null);
+  const [parsedStudents, setParsedStudents] = useState([]);
+  const [bulkUploadErrors, setBulkUploadErrors] = useState([]);
+  const [bulkUploadResult, setBulkUploadResult] = useState(null);
+  const [isUploadingBulk, setIsUploadingBulk] = useState(false);
+
   // Fetch initial configuration & questions
   useEffect(() => {
     fetchSystemSettings();
@@ -351,6 +359,203 @@ export default function App() {
     } catch (err) {
       setCreateStudentError('Network error creating student account');
     }
+  };
+
+  // Download CSV template for bulk student upload
+  const handleDownloadTemplate = () => {
+    const headers = ['index_number', 'name', 'school', 'degree', 'admission_year'];
+    const rows = [
+      ['2261004', 'John Doe', 'School of Technology and Social Sciences (SOTSS)', 'BSc in Computer Science', '2026'],
+      ['2261005', 'Jane Smith', 'GIMPA Business School (GBS)', 'BSc in Business Administration (Accounting Option)', '2026']
+    ];
+    
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(field => `"${field}"`).join(','))
+    ].join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "gimpa_students_bulk_upload_template.csv");
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Find canonical school and degree from user input (case-insensitive check)
+  const findCanonicalSchoolAndDegree = (schoolInput, degreeInput) => {
+    const schoolKeys = Object.keys(GIMPA_STRUCTURE);
+    const matchedSchool = schoolKeys.find(s => s.toLowerCase() === schoolInput.trim().toLowerCase());
+    
+    if (matchedSchool) {
+      const degrees = GIMPA_STRUCTURE[matchedSchool];
+      const matchedDegree = degrees.find(d => d.name.toLowerCase() === degreeInput.trim().toLowerCase());
+      if (matchedDegree) {
+        return {
+          school: matchedSchool,
+          degree: matchedDegree.name,
+          duration: matchedDegree.duration,
+          isValid: true
+        };
+      }
+    }
+    return {
+      school: schoolInput.trim(),
+      degree: degreeInput.trim(),
+      duration: 4,
+      isValid: false
+    };
+  };
+
+  // Handle file selection and parsing
+  const handleCSVFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    setBulkUploadFile(file);
+    setBulkUploadErrors([]);
+    setBulkUploadResult(null);
+    
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target.result;
+      parseCSVContent(text);
+    };
+    reader.readAsText(file);
+  };
+
+  // Parsing CSV text content into array of student objects
+  const parseCSVContent = (text) => {
+    const lines = text.split(/\r?\n/);
+    if (lines.length === 0 || (lines.length === 1 && !lines[0].trim())) {
+      setBulkUploadErrors(['The uploaded CSV file is empty.']);
+      return;
+    }
+    
+    // Parse header line
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/["']/g, ''));
+    
+    const indexIdx = headers.indexOf('index_number');
+    const nameIdx = headers.indexOf('name');
+    const schoolIdx = headers.indexOf('school');
+    const degreeIdx = headers.indexOf('degree');
+    const yearIdx = headers.indexOf('admission_year');
+    
+    if (indexIdx === -1 || nameIdx === -1 || schoolIdx === -1 || degreeIdx === -1 || yearIdx === -1) {
+      setBulkUploadErrors(['CSV header is invalid. It must contain: index_number, name, school, degree, admission_year']);
+      return;
+    }
+    
+    const studentsList = [];
+    const errorsList = [];
+    
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue; // Skip blank lines
+      
+      // Basic CSV line parser to handle quoted fields containing commas
+      const row = [];
+      let insideQuote = false;
+      let currentField = '';
+      
+      for (let j = 0; j < line.length; j++) {
+        const char = line[j];
+        if (char === '"' || char === "'") {
+          insideQuote = !insideQuote;
+        } else if (char === ',' && !insideQuote) {
+          row.push(currentField.trim().replace(/^["']|["']$/g, ''));
+          currentField = '';
+        } else {
+          currentField += char;
+        }
+      }
+      row.push(currentField.trim().replace(/^["']|["']$/g, ''));
+      
+      if (row.length < headers.length) {
+        errorsList.push(`Line ${i + 1}: Incomplete fields. Check if commas are placed correctly.`);
+        continue;
+      }
+      
+      const indexNum = row[indexIdx];
+      const name = row[nameIdx];
+      const schoolInput = row[schoolIdx];
+      const degreeInput = row[degreeIdx];
+      const yearStr = row[yearIdx];
+      const admissionYear = parseInt(yearStr, 10);
+      
+      if (!indexNum || !name || !schoolInput || !degreeInput || isNaN(admissionYear)) {
+        errorsList.push(`Line ${i + 1}: Missing or invalid required fields (e.g. index number, name, school, degree, or admission year).`);
+        continue;
+      }
+      
+      // Validate and canonicalize school/degree
+      const lookup = findCanonicalSchoolAndDegree(schoolInput, degreeInput);
+      
+      studentsList.push({
+        index_number: indexNum,
+        name: name,
+        school: lookup.school,
+        degree: lookup.degree,
+        admission_year: admissionYear,
+        duration: lookup.duration,
+        isValid: lookup.isValid,
+        lineNum: i + 1
+      });
+    }
+    
+    setParsedStudents(studentsList);
+    
+    if (errorsList.length > 0) {
+      setBulkUploadErrors(errorsList);
+    }
+  };
+
+  // Submit bulk student data to server
+  const handleBulkUploadSubmit = async () => {
+    const invalidCount = parsedStudents.filter(s => !s.isValid).length;
+    if (invalidCount > 0) {
+      alert(`Please fix the ${invalidCount} invalid rows with unrecognized school/degree details in your CSV before uploading.`);
+      return;
+    }
+    
+    if (parsedStudents.length === 0) {
+      alert("No valid students found in the CSV to upload.");
+      return;
+    }
+    
+    setIsUploadingBulk(true);
+    setBulkUploadErrors([]);
+    
+    try {
+      const res = await fetch('/api/students/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ students: parsedStudents })
+      });
+      
+      const data = await res.json();
+      
+      if (res.ok) {
+        setBulkUploadResult(data);
+        fetchStudents(); // Refresh the list in the directory
+      } else {
+        setBulkUploadErrors([data.error || 'Server rejected bulk import request.']);
+      }
+    } catch (err) {
+      setBulkUploadErrors(['Network error sending student list to server.']);
+    } finally {
+      setIsUploadingBulk(false);
+    }
+  };
+
+  const resetBulkUploadState = () => {
+    setBulkUploadFile(null);
+    setParsedStudents([]);
+    setBulkUploadErrors([]);
+    setBulkUploadResult(null);
   };
 
   // Change Student Account Activation Status
@@ -880,9 +1085,14 @@ export default function App() {
               <section style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <h3 style={{ fontFamily: 'var(--font-heading)', fontWeight: '700' }}>Student Access Directory ({students.length})</h3>
-                  <button onClick={() => setShowCreateStudentModal(true)} className="btn btn-primary">
-                    <span>👤</span> Add Student Account
-                  </button>
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button onClick={() => setShowBulkUploadModal(true)} className="btn btn-secondary">
+                      <span>📥</span> Bulk Upload Students
+                    </button>
+                    <button onClick={() => setShowCreateStudentModal(true)} className="btn btn-primary">
+                      <span>👤</span> Add Student Account
+                    </button>
+                  </div>
                 </div>
 
                 <div className="table-wrapper">
@@ -1078,6 +1288,169 @@ export default function App() {
                 Upload Past Question
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 5b. MODAL: Bulk Upload Students */}
+      {showBulkUploadModal && (
+        <div className="modal-overlay">
+          <div className="modal-content glass-panel" style={{ maxWidth: '800px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div className="modal-header">
+              <h3>Bulk Upload Student Accounts</h3>
+              <button 
+                onClick={() => { setShowBulkUploadModal(false); resetBulkUploadState(); }} 
+                className="modal-close"
+              >
+                ×
+              </button>
+            </div>
+            
+            {!bulkUploadResult ? (
+              <>
+                <div className="glass-panel" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.85rem' }}>
+                  <div style={{ fontWeight: '600', color: 'var(--primary-hover)' }}>💡 Bulk Upload Instructions:</div>
+                  <ul style={{ paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '6px', color: 'var(--text-muted)' }}>
+                    <li>Please upload a <strong>CSV (.csv)</strong> file.</li>
+                    <li>The CSV must contain headers in the first row: <code style={{ color: 'var(--text-main)', background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px' }}>index_number, name, school, degree, admission_year</code></li>
+                    <li>GIMPA School and Degree Program names must match our structure case-insensitively (e.g. <code>School of Technology and Social Sciences (SOTSS)</code> and <code>BSc in Computer Science</code>).</li>
+                    <li>Program duration (duration of study) will be automatically assigned.</li>
+                  </ul>
+                  <button 
+                    onClick={handleDownloadTemplate} 
+                    className="btn btn-secondary" 
+                    style={{ alignSelf: 'flex-start', marginTop: '10px' }}
+                  >
+                    <span>⬇️</span> Download CSV Template
+                  </button>
+                </div>
+
+                <div className="form-group">
+                  <label>Select Student CSV File</label>
+                  <input 
+                    type="file" 
+                    accept=".csv"
+                    onChange={handleCSVFileChange}
+                    className="form-input" 
+                    style={{ padding: '12px' }}
+                  />
+                </div>
+
+                {bulkUploadErrors.length > 0 && (
+                  <div className="error-message" style={{ maxHeight: '120px', overflowY: 'auto', textAlign: 'left' }}>
+                    <div style={{ fontWeight: '700', marginBottom: '6px' }}>Format & Parsing Errors:</div>
+                    <ul style={{ paddingLeft: '16px' }}>
+                      {bulkUploadErrors.map((err, idx) => (
+                        <li key={idx}>{err}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {parsedStudents.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div style={{ fontWeight: '600', fontSize: '0.9rem' }}>
+                      Parsed Students Summary ({parsedStudents.length} rows found)
+                    </div>
+                    <div className="table-wrapper" style={{ maxHeight: '250px', overflowY: 'auto' }}>
+                      <table>
+                        <thead>
+                          <tr>
+                            <th style={{ width: '60px' }}>Status</th>
+                            <th>Index Number</th>
+                            <th>Name</th>
+                            <th>School & Degree Program</th>
+                            <th>Admission</th>
+                            <th>Duration</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {parsedStudents.map((s, idx) => (
+                            <tr key={idx} style={{ opacity: s.isValid ? 1 : 0.6 }}>
+                              <td>
+                                {s.isValid ? (
+                                  <span style={{ color: '#10b981', fontWeight: 'bold' }} title="Valid program selection">✓</span>
+                                ) : (
+                                  <span style={{ color: '#ef4444', fontWeight: 'bold' }} title="Invalid program or school - will be ignored">✗</span>
+                                )}
+                              </td>
+                              <td>{s.index_number}</td>
+                              <td>{s.name}</td>
+                              <td>
+                                <div style={{ fontSize: '0.8rem', fontWeight: '600' }}>{s.school}</div>
+                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{s.degree}</div>
+                                {!s.isValid && (
+                                  <div style={{ color: '#f87171', fontSize: '0.7rem', marginTop: '2px' }}>
+                                    ⚠️ Unrecognized School/Degree Program combination
+                                  </div>
+                                )}
+                              </td>
+                              <td>{s.admission_year}</td>
+                              <td>{s.duration} years</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '10px' }}>
+                  <button 
+                    onClick={() => { setShowBulkUploadModal(false); resetBulkUploadState(); }} 
+                    className="btn btn-secondary"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={handleBulkUploadSubmit} 
+                    disabled={isUploadingBulk || parsedStudents.length === 0 || parsedStudents.some(s => !s.isValid)} 
+                    className="btn btn-primary"
+                  >
+                    {isUploadingBulk ? 'Uploading...' : `Upload ${parsedStudents.filter(s => s.isValid).length} Accounts`}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', textAlign: 'center', padding: '20px 0' }}>
+                <div style={{ fontSize: '3rem' }}>🎉</div>
+                <h4 style={{ fontSize: '1.2rem', fontWeight: '700' }}>Bulk Import Completed!</h4>
+                
+                <div style={{ display: 'flex', justifyContent: 'space-around', margin: '10px 0' }}>
+                  <div className="glass-panel" style={{ padding: '16px', minWidth: '120px' }}>
+                    <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#10b981' }}>{bulkUploadResult.successCount}</div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Successfully Added</div>
+                  </div>
+                  <div className="glass-panel" style={{ padding: '16px', minWidth: '120px' }}>
+                    <div style={{ fontSize: '1.5rem', fontWeight: '700', color: bulkUploadResult.failCount > 0 ? '#ef4444' : 'var(--text-muted)' }}>{bulkUploadResult.failCount}</div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Failed/Skipped</div>
+                  </div>
+                </div>
+
+                {bulkUploadResult.errors.length > 0 && (
+                  <div className="glass-panel" style={{ padding: '16px', textAlign: 'left', maxHeight: '180px', overflowY: 'auto' }}>
+                    <div style={{ fontWeight: '700', fontSize: '0.85rem', color: '#f87171', marginBottom: '8px' }}>
+                      Failed Entries Details:
+                    </div>
+                    <ul style={{ fontSize: '0.8rem', paddingLeft: '16px', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      {bulkUploadResult.errors.map((err, idx) => (
+                        <li key={idx}>
+                          <strong>{err.index_number} ({err.name})</strong>: {err.error}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                <button 
+                  onClick={() => { setShowBulkUploadModal(false); resetBulkUploadState(); }} 
+                  className="btn btn-primary" 
+                  style={{ alignSelf: 'center', marginTop: '10px', minWidth: '150px' }}
+                >
+                  Close
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
